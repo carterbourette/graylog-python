@@ -1,0 +1,75 @@
+version: '3'
+services:
+    sample:
+        env_file:
+            - .env
+        build:
+            context: .
+            dockerfile: sample/Dockerfile
+        logging:
+            driver: gelf
+            options:
+                gelf-address: udp://127.0.0.1:12201
+                tag: sample
+        depends_on:
+            - graylog
+    
+    mongo:
+        image: mongo:4.0
+        networks:
+            - graylog
+        volumes:
+            - mongo_data:/data/db
+    
+    elasticsearch:
+        image: docker.elastic.co/elasticsearch/elasticsearch-oss:6.8.10
+        environment:
+            - http.host=0.0.0.0
+            - transport.host=localhost
+            - network.host=0.0.0.0
+            - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+        ulimits:
+            memlock:
+                soft: -1
+                hard: -1
+        deploy:
+            resources:
+                limits:
+                    memory: 1g
+        networks:
+            - graylog
+        volumes:
+            - es_data:/usr/share/elasticsearch/data
+
+    graylog:
+        image: graylog/graylog:3.3
+        environment:
+            - GRAYLOG_PASSWORD_SECRET=mfyz11sanane22banane
+            # Password: admin
+            - GRAYLOG_ROOT_PASSWORD_SHA2=8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918
+            - GRAYLOG_HTTP_EXTERNAL_URI=http://127.0.0.1:9000/
+        networks:
+            - graylog
+        depends_on:
+            - mongo
+            - elasticsearch
+        ports:
+            - 9000:9000 # Graylog web interface and REST API
+            - 12201:12201/udp # GELF UDP
+            - 12201:12201 # GELF TCP
+            - 5555:5555 # Raw/Plaintext TCP
+            - 1514:1514 # Syslog TCP
+            - 1514:1514/udp # Syslog UDP
+        volumes:
+            - graylog_data:/usr/share/graylog/data
+networks:
+    graylog:
+        driver: bridge
+
+volumes:
+    mongo_data:
+        driver: local
+    es_data:
+        driver: local
+    graylog_data:
+        driver: local
